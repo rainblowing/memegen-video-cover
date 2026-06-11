@@ -5,10 +5,11 @@ description: >-
   chosen artist (e.g. Viktor Tsoi) performs reworked lyrics over a soundalike of
   a famous song, with a cinematic regenerated video. Use this when the user wants
   to make a "meme cover": new lyrics + cloned artist voice + AI video with lipsync.
-  Covers the full pipeline: de-plagiarized meter-locked lyrics → Suno Add-Vocals
-  over the REAL separated minus → RVC artist voice → Higgsfield image+video
-  (Nano Banana Pro + Veo 3.1) → fal Sync 2.0 Pro lipsync → whisper-aligned ffmpeg
-  assembly → composio YouTube publish. The working star lives at work/memegen.
+  Step 0 = the user picks a PIPELINE: A — new lyrics over the REAL separated minus
+  (BS-Roformer → Suno Add-Vocals → RVC), B — voice-swap of the original vocal (RVC
+  only, original lyrics), C — Suno soundalike from scratch + RVC. Then the shared
+  video flow: Higgsfield image+video (user picks models) → fal Sync 2.0 Pro lipsync →
+  whisper-aligned ffmpeg assembly → composio YouTube publish. Star: work/memegen.
 ---
 
 # memegen-video-cover
@@ -22,11 +23,35 @@ Project lives in the **memegen star**: `…/obsidian/work/memegen/`. Per-meme ar
 
 ---
 
+## 🅰️ Step 0 — pick the PIPELINE (the FIRST question, before anything else)
+
+Different covers need different audio recipes. Ask the user which cover this is and lock a
+pipeline letter — it decides the LYRICS + AUDIO stages; VIDEO → ASSEMBLE → PUBLISH are shared.
+
+| | Pipeline | What it makes | Audio recipe |
+|--|---|---|---|
+| **A ⭐** | **Parody on the REAL minus** (shipped: «Онлифанщица») | NEW lyrics sung by the cloned artist over the original song's actual instrumental | meter-locked de-plagiarized lyrics → BS-Roformer minus → Suno "Add Vocals" → RVC |
+| **B** | **Voice swap** | The ORIGINAL lyrics & melody in another artist's voice ("X sings Y as-is") | BS-Roformer BOTH stems → RVC the original vocal stem → remix with the minus (no Suno, no lyric work) |
+| **C** | **Soundalike from scratch** | A new song "in the vibe of" — no original audio touched | Suno full generation (style prompt + lyrics) → RVC |
+
+Picking between them:
+- **A** — max fidelity to the original arrangement; the meme reads instantly. Highest
+  Content-ID risk (real instrumental). The only pipeline proven end-to-end.
+- **B** — fastest audio (no Suno, no lyric rewriting); pure voice-clone meme. Stems stay
+  time-aligned, so the remix is a plain `amix` — no stretching.
+- **C** — copyright-safest. Do NOT promise the original's arrangement: Suno **cannot**
+  imitate a specific track from a style prompt (verified — it lands far away). Use
+  `suno-cover-architect` for the style prompt.
+- The menu is **open** — when a new cover type appears, add a new letter + recipe here.
+
+---
+
 ## The flow (high level)
 
 ```
-LYRICS  ─ meter-locked to the original + de-plagiarized (pass Suno copyright filter)
-AUDIO   ─ separate REAL minus (BS-Roformer) → Suno "Add Vocals" over it → RVC artist voice
+STEP 0  ─ user picks pipeline A / B / C  (decides LYRICS + AUDIO; the rest is shared)
+LYRICS  ─ A: meter-locked + de-plagiarized · B: keep originals · C: free-form new lyrics
+AUDIO   ─ A: minus + Suno Add-Vocals + RVC · B: stem-swap RVC remix · C: Suno gen + RVC
 VIDEO   ─ storyboard whole song → SEED per shot → CLIP per shot (raw, numbered) → approve each
 ASSEMBLE─ transcribe vocal (whisper) → cut shots ONTO their lyric lines → lipsync singers → concat
 PUBLISH ─ composio → YouTube (private upload + thumbnail) → user flips Public in Studio
@@ -56,7 +81,7 @@ re-roll, not a re-render of the whole film.
 
 ---
 
-## 🎛 Choose the image + video models FIRST (ask the user — important)
+## 🎛 Choose the image + video models (second question, after Step 0 — important)
 
 Model choice is the user's call, per meme — do NOT silently hardcode it. At the start of the
 video stage, run `hf model list --image` and `hf model list --video`, present a short menu, and
@@ -178,18 +203,37 @@ Audio slices: `seg.mp3 = audio[start:end]` for the whole act; per-singing-shot
 
 ---
 
-## Audio side (reference — see also work/memegen scripts & docs/audio-pipeline.md)
+## Audio side, per pipeline (see also work/memegen scripts & docs/audio-pipeline.md)
 
+**Shared building blocks** (every pipeline ends in RVC):
+- **Separation:** `scripts/separate_minus.sh <orig> minus.wav` — BS-Roformer `ep_317`
+  (`audio-separator`), yields BOTH stems: instrumental ("minus") + vocal.
+- **Artist voice (RVC):** `scripts/rvc_voice.sh <vocal_url_or_file> <rvc_model_zip> out.mp3`
+  (Replicate `realistic-voice-cloning`; e.g. Tsoi = `varaslaw/victor_coy`). Needs
+  `$REPLICATE_API_TOKEN`.
+
+**Pipeline A — parody on the real minus** (proven end-to-end):
 1. **Lyrics:** parody that **matches the original meter** (syllables + stress per line,
    pull word-level timings from the source `subs*.vtt`) AND is **de-plagiarized** (reword
    every distinctive source line — Suno's lyric filter blocks verbatim → `GEN_BLOCK`).
-2. **Real minus:** `scripts/separate_minus.sh <orig> minus.wav` (BS-Roformer `ep_317`).
+2. **Real minus** via BS-Roformer (above).
 3. **Suno Add-Vocals over the minus:** upload `minus.mp3` → identify as *Instrument Stem* →
    Continue → paste lyrics + vocal style → Create (web/nodriver). **Suno uploads are
    rate-limited** — one upload, then wait; rapid retries escalate the block.
-4. **Artist voice:** `scripts/rvc_voice.sh <suno_take_url> <rvc_model_zip> out.mp3`
-   (Replicate `realistic-voice-cloning`; e.g. Tsoi = `varaslaw/victor_coy`). Needs
-   `$REPLICATE_API_TOKEN`.
+4. **RVC** the chosen Suno take.
+
+**Pipeline B — voice swap (original lyrics):**
+1. Separate BOTH stems (above).
+2. **RVC the original vocal stem** to the target artist.
+3. Remix — stems stay time-aligned, so it's a plain mix (no stretching):
+   `ffmpeg -i vocal_rvc.mp3 -i minus.wav -filter_complex "[0:a][1:a]amix=inputs=2:normalize=0" mix.mp3`
+   — then match loudness by ear (offer ±dB `volume=` on the vocal).
+
+**Pipeline C — soundalike from scratch:**
+1. Style prompt via the **`suno-cover-architect`** skill (copyright-clean "vibe of" prompt).
+2. Suno full Create (lyrics + style, no upload — so no rate-limit pain) → generate takes,
+   user picks by ear.
+3. **RVC** the chosen take.
 
 **Do NOT auto-open an audio player** — the user listens in Obsidian. Secrets live in
 `~/.zshenv`, never in chat.

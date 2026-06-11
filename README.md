@@ -8,11 +8,23 @@ lipsync, and one-command publish to YouTube.
 It's a **dynamic, human-in-the-loop workflow** (no orchestration framework): you steer it shot by
 shot; it generates in background batches and shows you frame-strips to approve.
 
-## The pipeline
+## Pipelines (you pick one at the start)
+
+Step 0 of the workflow: choose the pipeline for the cover you're making — it decides the
+lyrics + audio recipe; the video / assembly / publish stages are shared.
+
+| | Pipeline | What it makes |
+|--|---|---|
+| **A** ⭐ | **Parody on the real minus** | NEW lyrics over the original song's actual instrumental (BS-Roformer minus → Suno "Add Vocals" → RVC) |
+| **B** | **Voice swap** | The original lyrics & melody in another artist's voice (RVC on the separated vocal stem — no Suno) |
+| **C** | **Soundalike from scratch** | A new song "in the vibe of" — Suno full generation → RVC, no original audio used |
+
+The menu is open-ended — new cover types get a new letter.
 
 ```
-LYRICS   → meter-locked parody + de-plagiarized to pass Suno's copyright filter
-AUDIO    → separate the REAL instrumental (BS-Roformer) → Suno "Add Vocals" over it → RVC artist voice
+STEP 0   → pick pipeline A / B / C (decides lyrics + audio)
+LYRICS   → A: meter-locked parody, de-plagiarized · B: keep originals · C: free-form
+AUDIO    → per pipeline (see SKILL.md) — all end in the RVC artist voice
 VIDEO    → storyboard the whole song → a SEED image per shot → a CLIP per shot → you approve each
 ASSEMBLE → transcribe the vocal (whisper) → cut shots ONTO their lyric lines → lipsync the singers → concat
 PUBLISH  → composio → YouTube (upload + thumbnail)
